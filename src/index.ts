@@ -68,12 +68,10 @@ const createPlugins = (): Plugin[] => {
           const end = item.index! + item[0].length
           const filepath = path.resolve(dir, item[1])
 
-          const cacheKey = filepath
-          let cache = loadCache.get(cacheKey)
+          let cache = loadCache.get(filepath)
           if (!cache) {
             const { mod, dependencies } = await bundleRequire({ filepath })
-            const defaultExport: CompileTimeFunction | undefined =
-              mod.default || mod
+            const defaultExport: CompileTimeFunction | undefined = mod.default
             cache = (defaultExport && (await defaultExport({ root }))) || {}
 
             cache.watchFiles = [
@@ -81,22 +79,20 @@ const createPlugins = (): Plugin[] => {
               ...(cache.watchFiles || []),
               ...dependencies.map((p) => path.resolve(p)),
             ]
-            if (cache.data) {
-              cache.data = devalue.uneval(cache.data)
-            }
-            loadCache.set(cacheKey, cache)
+            cache.data = cache.data && devalue.uneval(cache.data)
+            loadCache.set(filepath, cache)
           }
 
+          cache.watchFiles?.forEach((filepath) => {
+            this.addWatchFile(filepath)
+          })
           let replacement = "null"
-          if (cache.watchFiles) {
-            cache.watchFiles.forEach((filepath) => {
-              this.addWatchFile(filepath)
-            })
-          }
           if (cache.data !== undefined) {
             replacement = cache.data
           } else if (cache.code !== undefined) {
             replacement = cache.code
+          } else {
+            console.error(`compile-time: ${filepath} did not return data or code field in default export`)
           }
 
           s.overwrite(start, end, replacement)
